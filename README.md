@@ -12,7 +12,7 @@ The editor has the following limits on the size of the files it can open and sav
 * Max number of paragraphs: 100.
 
 ## Installation
-The program consists of two parts; Editor.bas which is the main program and EditorProc.bas which consists of a number of procdures called from the main program, and which is put into a separate memory bank when the main program is executed.
+The program consists of two parts; Editor.bas which is the main program and EditorProc.bas which consists of a number of procedures called from the main program, and which is put into a separate memory bank when the main program is executed.
 
 ## Development tools
 The program has been authored in Visual Studio Code with Remy Sharp's NextBASIC plugin and the ZX Spectrum Next emulator #CSpect by Mike Dailly.
