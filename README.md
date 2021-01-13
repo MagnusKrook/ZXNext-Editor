@@ -14,7 +14,7 @@ The editor has the following limitations on the size of the files it can open an
 ## Running the program
 The program consists of two parts: The main program **Editor.bas** together with **EditorProc.bas** which is stored in a separate memory bank. Copy both these files to the SD card and type **LOAD "Editor.bas"** to start the editor.
 
-The editor commands are accessed bey entering extended mode and pressing the relevant key as presented in command menu at the bottom of the screen.
+The editor commands are accessed by entering extended mode and pressing the relevant key as presented in command menu at the bottom of the screen.
 
 If a mouse is connected, it can be used to move the cursor and to trigger commands.
 
