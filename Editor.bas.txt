@@ -1,0 +1,278 @@
+1 ; A text editor for the ZX Spectrum Next.
+2 ; https://github.com/MagnusKrook/ZXNext-Editor
+3 ; Version 0.3
+100 ; ---------------------------------------------------------
+101 ; -                     Initialize                        -
+102 ; ---------------------------------------------------------
+106 ; Path to the supplementary files "EditorProc.bas" and
+108 ; "Pointer.spr". Edit if needed.
+110 F$=""
+118 ; Remove +3 header from saved files, using the EXTRACT
+119 ; dot command. Set to 0 to deactivate.
+120 RemoveHeader=1: 
+140 ; Save the current CPU Speed.
+150 OUT 9275,7:%C=% IN 9531&@11:
+160 ; Set CPU Speed to 28 KHz.
+170 RUN AT 3:
+180 ; Select Timex HiRes mode and 85 columns.
+190 LAYER 1,2: PRINT CHR$ 30; CHR$ 6: BORDER 7: INK 0: CLS
+200 ; Files are limited to a maximum number of paragraphs.
+210 MaxNumberOfParagraphs=100
+220 ; Find free memory banks.
+230 BANK NEW WorkArea: ; Temporary storage for edited file.
+240 BANK NEW ProcArea: ; Memory bank for part of the program.
+250 BANK NEW SpriteArea: ; Memory bank for sprites.
+260 ; Load the rest of the program into a separate memory bank.
+270 LOAD F$+"EditorProc.bas" BANK ProcArea
+280 ; There are no edits yet.
+290 DirtyFlag=0
+300 ; There can be different codes for LINE breaks. The default
+310 ; is"0A".
+320 B$="0A"
+330 ; Install the mouse driver.
+340 ON ERROR GO TO 360: ; Error if driver is already installed.
+350 .Install /nextzxos/mouse.drv
+360 ON ERROR
+370 ; Initialize the mouse.
+380 LOAD F$+"Pointer.spr" BANK SpriteArea
+390 SPRITE BANK SpriteArea: SPRITE PRINT 1: SPRITE BORDER 1
+400 DRIVER 126,2,0,0: ; Sprite bank 0, sprite 0.
+410 DRIVER 126,6,255: ; No horizontal acceleration.
+420 ; System variables.
+430 LASTK=23560: ; Newly pressed key.
+440 MODE=23617: ; Cursor mode (0=Normal, 1=Extended mode)
+450 ; Create a new, empty file.
+460 PROC NewFile()
+500 ; ---------------------------------------------------------
+501 ; -                      Main loop                        -
+502 ; ---------------------------------------------------------
+510 ; Reset key input before starting the loop.
+520 POKE LASTK,0: POKE MODE,0:LastKeyPressed=0
+525 ON ERROR GOTO 530
+530 REPEAT
+535 ; Pause for 1 frame, waiting for a key to be pressed.
+537 PAUSE 1
+540 ; Check for what (if any) key was pressed.
+550 LastKeyPressed= PEEK LASTK: POKE LASTK,0
+560 ; If the "Extended mode" button was pressed, toggle the
+570 ; cursor mode 0/1.
+580 IF LastKeyPressed=14 AND PEEK MODE=0 THEN POKE MODE,1: BEEP 0.01,3: PRINT AT 23,82;"Ext": GO TO 610
+590 IF LastKeyPressed=14 AND PEEK MODE=1 THEN POKE MODE,0: BEEP 0.01,1
+600 ; Move the cursor.
+610 IF LastKeyPressed=11 THEN BANK ProcArea PROC MoveCursor(0): ; (up arrow key)
+620 IF LastKeyPressed=10 THEN BANK ProcArea PROC MoveCursor(2): ; (down arrow key)
+630 IF LastKeyPressed=9 THEN BANK ProcArea PROC MoveCursor(1): ; (right arrow key)
+640 IF LastKeyPressed=8 THEN BANK ProcArea PROC MoveCursor(3): ; (left arrow key)
+650 ; Edit functions.
+660 IF LastKeyPressed=12 THEN BANK ProcArea PROC HandleDeleteKey()
+670 IF LastKeyPressed=13 THEN BANK ProcArea PROC InsertParagraph()
+680 IF LastKeyPressed >= 32 AND LastKeyPressed <= 127 THEN BANK ProcArea PROC InsertChar()
+690 ; File commands. Note that extended mode is deactivated
+700 ; before each command is executed and the LASTK system
+710 ; variable is cleared after execution. This is to
+720 ; prevent interference between key presses in the file
+730 ; browser and the editor.
+740 IF LastKeyPressed=227 THEN POKE MODE,0: PROC Savefile(1): POKE LASTK,0
+750 IF LastKeyPressed=229 THEN POKE MODE,0: PROC Savefile(0): POKE LASTK,0
+760 IF LastKeyPressed=190 THEN POKE MODE,0: PROC OpenFile(): POKE LASTK,0
+770 IF LastKeyPressed=166 THEN POKE MODE,0: PROC NewFile(): POKE LASTK,0
+780 ; Clear the "Ext"-label when leaving extended mode.
+790 IF PEEK MODE=0 THEN PRINT AT 23,82;"   "
+800 ; Check if the mouse button was pressed.
+810 DRIVER 126,1 TO %b,x,y: IF %b&@111 > 0 THEN BANK ProcArea PROC HandleMouseClick(x,y)
+820 ; Repeat the main loop until the "quit" command is selected.
+830 REPEAT UNTIL LastKeyPressed=178
+840 PROC Quit()
+850 CLS
+860 CLEAR
+870 STOP
+4100 ; ---------------------------------------------------------
+4101 ; -                        Open file                      -
+4102 ; ---------------------------------------------------------
+4110 DEFPROC OpenFile()
+4120 LOCAL t$,e,r$,x$,fileSize,chrcode
+4124 ; If there are unsaved edits, save the current file ?
+4125 IF DirtyFlag=1 THEN PROC SaveFileQuery()
+4129 ; Set up the variables to store the file data.
+4130 PROC PrepareStorage()
+4139 ; Select a file
+4140 .BROWSE --type TXT --type CFG --prompt "Please select a file (.txt or .cfg)" F$
+4149 ; Get the file size
+4150 PROC CalculateFileSize()
+4160 IF fileSize > 16384 THEN BANK ProcArea PROC Message("File larger than 16 kB",0): GO TO 4130
+4170 IF fileSize=0 THEN BANK ProcArea PROC Message("File is empty",0): GO TO 4130
+4179 ; Store the file content in a memory bank.
+4180 BANK WorkArea ERASE : LOAD F$ BANK WorkArea,0,fileSize
+4185 ; Check which control characters are used for line breaks.
+4186 ; Possible cases are "0A", "0D0A" or "OD". Also, there is
+4187 ; the special case where there is only one line and no
+4188 ; line break.
+4189 ; The line break string is stored in B$. Begin with "".
+4190 B$=""
+4199 ; Check for "0A".
+4200 PROC TestFor0A() TO B$
+4209 ; Check for "0D".
+4210 PROC TestFor0D() TO X$
+4220 B$=X$+B$
+4239 ; Store the file content in arrays.
+4240 PROC PopulateArrays() TO e
+4250 IF e=0 THEN GO TO 4130
+4293 ; Check the text size.
+4294 IF LastParagraph >= MaxNumberOfParagraphs THEN BANK ProcArea PROC Message("Too many paragraphs",0): GO TO 4130
+4295 PROC SetUpView()
+4300 ENDPROC
+4400 DEFPROC TestFor0A()
+4405 ON ERROR ENDPROC =""
+4410 t$= BANK WorkArea PEEK$ (0,~10)
+4420 ENDPROC = CHR$ (10)
+4430 DEFPROC TestFor0D()
+4435 ON ERROR ENDPROC =""
+4440 t$= BANK WorkArea PEEK$ (0,~13)
+4450 ENDPROC = CHR$ (13)
+4500 ; ---------------------------------------------------------
+4501 ; -              Open file: populate arrays               -
+4502 ; ---------------------------------------------------------
+4503 ; Extract paragraphs from the file stored in the WorkArea
+4504 ; and store them in the P$ array. Since a string array is
+4505 ; fixed in size, we also need to store the length of each
+4506 ; paragraph in the L array.
+4507 ; This procedure exits with a value 1 on success.
+4510 DEFPROC PopulateArrays()
+4520 LOCAL r$,pos,rowlength
+4530 pos=0
+4540 LastParagraph=0
+4550 CharacterCount=0
+4553 ; We identify paragraphs by searching for the paragraph
+4554 ; break string (B$). If the file ends without a break,
+4555 ; there will be an error so we need to catch this and
+4556 ; extract the last parapgrah separately.
+4557 ; exit the procedure. 
+4560 ON ERROR GO TO 4600
+4570 FOR i=1 TO MaxNumberOfParagraphs
+4580 IF pos > fileSize-1 THEN ENDPROC =1
+4589 ; Extract a parapgraph ending with a break string.
+4590 r$= BANK WorkArea PEEK$ (pos,~ CODE (B$(1))): GO TO 4610
+4598 ; When no break string is found, extract what remains
+4599 ; of the file.
+4600 ON ERROR: IF pos < fileSize-1 THEN r$= BANK WorkArea PEEK$ (pos,fileSize-pos)
+4609 ; Check that the paragraph is within the allowed size.
+4610 IF LEN r$ <= 256 THEN rowlength= LEN r$: ELSE BANK ProcArea PROC Message("Paragraph too long",0): ENDPROC =0
+4619 ; Store the paragraph and metadata.
+4620 P$(i)=r$(1 TO rowlength)
+4630 L(i)=rowlength
+4640 CharacterCount=CharacterCount+rowlength
+4650 pos=pos+L(i)+ LEN B$
+4660 LastParagraph=i
+4669 ; Update the progress bar.
+4670 IF INT (i/10)=i/10 THEN BANK ProcArea PROC Progress(1+ INT (i/10))
+4680 NEXT i
+4690 ENDPROC =1
+4800 ; ---------------------------------------------------------
+4801 ; -            Open file: Calculate file size             -
+4802 ; ---------------------------------------------------------
+4810 DEFPROC CalculateFileSize()
+4820 OPEN # 15,F$
+4830 DIM #15 TO fileSize
+4840 IF fileSize <= 128 THEN GOTO 4885
+4850 x$="": GO TO #15,%0
+4860 FOR i=1 TO 8
+4865 NEXT #15 TO chrcode
+4870 x$=x$+ CHR$ (chrcode)
+4875 NEXT i
+4880 IF x$="PLUS3DOS" THEN fileSize=fileSize-128
+4885 CLOSE # 15: PRINT AT 0,0; : ; The PRINT statement prevents a problem with the streams.
+4890 ENDPROC
+4900 ; ---------------------------------------------------------
+4901 ; -                      New file                         -
+4902 ; ---------------------------------------------------------
+4910 DEFPROC NewFile()
+4920 IF DirtyFlag=1 THEN PROC SaveFileQuery()
+4930 F$="Untitled"
+4935 B$= CHR$ (10)
+4940 PROC PrepareStorage()
+4961 LastParagraph=1
+4962 CharacterCount=0
+4963 PROC SetUpView()
+4970 ENDPROC
+5000 ; ---------------------------------------------------------
+5001 ; -       Set up the view of a New file/Opened file       -
+5002 ; ---------------------------------------------------------
+5010 DEFPROC SetUpView()
+5020 DirtyFlag=0
+5030 CursorRow=1
+5040 CursorCol=0
+5050 FirstVisibleParagraph=1
+5060 BANK ProcArea PROC RefreshDisplay()
+5070 BANK ProcArea PROC DisplayCursor()
+5080 BANK ProcArea PROC CalculateCursorPositionInText()
+5090 ENDPROC
+5100 ; ---------------------------------------------------------
+5101 ; -                        Save                           -
+5102 ; ---------------------------------------------------------
+5110 DEFPROC Savefile(saveAsFlag)
+5120 LOCAL pos
+5130 IF saveAsFlag=1 OR F$="Untitled" THEN BANK ProcArea PROC ClearMessage(): INPUT AT 22,0;"Save as: ";F$: BANK ProcArea PROC ClearMessage()
+5140 ; Store the file content in memory.
+5150 ; Ensure that we have a line break code.
+5160 IF LEN B$=0 THEN LET B$= CHR$ (10)
+5170 pos=0
+5180 FOR i=1 TO LastParagraph
+5190 BANK WorkArea POKE pos,P$(i)
+5200 pos=pos+L(i)
+5210 IF i < LastParagraph THEN BANK WorkArea POKE pos,B$:pos=pos+ LEN B$
+5220 IF INT (i/8)=i/8 THEN BANK ProcArea PROC Progress(1+ INT (i/8)): ; Update the progress bar.
+5230 NEXT i
+5240 IF RemoveHeader=0 THEN SAVE F$ BANK WorkArea,0,pos: ELSE PROC RemoveHeader(pos)
+5250 BANK ProcArea PROC Message("Saved",0)
+5260 DirtyFlag=0
+5270 BANK ProcArea PROC RefreshDisplay()
+5280 BANK ProcArea PROC DisplayCursor()
+5290 BANK ProcArea PROC CalculateCursorPositionInText()
+5295 ENDPROC
+5300 ; ---------------------------------------------------------
+5301 ; -           Remove +3 header from saved file            -
+5302 ; ---------------------------------------------------------
+5310 DEFPROC RemoveHeader(toPos)
+5320 LOCAL t$,u$
+5330 t$=F$+".tmp"
+5340 u$=t$+" +128 -o "+F$+" -f"
+5350 SAVE t$ BANK WorkArea,0,toPos
+5360 .$ Extract u$
+5370 .$ Rm t$
+5380 ENDPROC
+5400 ; ---------------------------------------------------------
+5401 ; -                         Quit                          -
+5402 ; ---------------------------------------------------------
+5410 DEFPROC Quit()
+5420 ; Check if the user wants to save before quitting.
+5430 IF DirtyFlag=1 THEN PROC SaveFileQuery()
+5440 ; Restore CPU Speed.
+5450 REG 7,%C
+5460 ; Clear the memory.
+5470 BANK WorkArea CLEAR
+5480 BANK ProcArea CLEAR
+5490 BANK SpriteArea CLEAR
+5500 ; Uninstall the mouse driver.
+5510 .Uninstall /nextzxos/mouse.drv
+5520 ; Hide the mouse pointer.
+5530 SPRITE PRINT 0
+5540 ENDPROC
+5600 ; ---------------------------------------------------------
+5601 ;                      Save file query                    -
+5602 ; ---------------------------------------------------------
+5610 DEFPROC SaveFileQuery()
+5645 BANK ProcArea PROC Message("Save changes (y/n)?",1)
+5647 PAUSE 0
+5650 IF INKEY$ ="y" OR INKEY$ ="Y" THEN PROC Savefile(0)
+5655 BANK ProcArea PROC ClearMessage()
+5660 ENDPROC
+7000 ; ---------------------------------------------------------
+7001 ; -                   Prepare storage                     -
+7002 ; ---------------------------------------------------------
+7010 DEFPROC PrepareStorage()
+7020 BANK WorkArea ERASE : ; Clear the memory bank.
+7030 DIM P$(MaxNumberOfParagraphs,256): ; Array of paragraphs.
+7040 DIM L(MaxNumberOfParagraphs): ; Paragraph lengths.
+7050 DIM R(MaxNumberOfParagraphs): ; Starting screen row for each paragraph.
+7060 DIM N(MaxNumberOfParagraphs): ; Number of rows in each paragraph.
+7070 ENDPROC

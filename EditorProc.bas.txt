@@ -1,0 +1,249 @@
+1 ; A text editor for the ZX Spectrum Next.
+2 ; https://github.com/MagnusKrook/ZXNext-Editor
+3 ; Version 0.3
+2000 ; ---------------------------------------------------------
+2001 ; -                  Refresh display                      -
+2002 ; ---------------------------------------------------------
+2010 DEFPROC RefreshDisplay()
+2020 LOCAL %r,index
+2030 ; Print the file name in the top right corner.
+2040 CLS
+2050 PRINT AT 0,0; INVERSE 1;F$:
+2060 PROC DisplayCharacterCount()
+2070 ; This loop prints paragraphs to fill rows 1-20. The
+2071 ; strings are are stored in the P$-array, which has
+2073 ; a fixed size of 256 bytes (the L-array contains the
+2075 ; actual length of each paragraph). After each paragraph
+2076 ; has been printed, the row at which it starts is stored in
+2077 ; the R-array and the number of lines it takes up on the
+2078 ; is stored in the N-array. This information is used later
+2079 ; to calculate where in a paragraph the cursor is located.
+2080 row=1:index=0
+2090 REPEAT: WHILE FirstVisibleParagraph+index <= LastParagraph
+2100 PRINT AT row,0;(P$(FirstVisibleParagraph+index)(1 TO L(FirstVisibleParagraph+index)))
+2110 R(FirstVisibleParagraph+index)=row
+2120 IF L(FirstVisibleParagraph+index)=0 THEN N(FirstVisibleParagraph+index)=1: ELSE N(FirstVisibleParagraph+index)= INT (1+(L(FirstVisibleParagraph+index)-1)/85)
+2130 row=row+N(FirstVisibleParagraph+index)
+2140 index=index+1
+2150 REPEAT UNTIL row > 20
+2155 LastVisibleParagraph=FirstVisibleParagraph+index-1
+2160 PROC DisplayMenu()
+2170 ENDPROC
+2200 ; ---------------------------------------------------------
+2201 ; -                     Move cursor                       -
+2202 ; ---------------------------------------------------------
+2210 DEFPROC MoveCursor(direction): ; 0=up,1=right,2=down,3=left
+2219 ; Erase the cursor.
+2220 PROC DisplayCursor()
+2228 ; Move the cursor to the right, or to the beginning of the
+2229 ; next row when the end of a row has been reached.
+2230 IF direction=1 AND CurrentParagraph <> LastParagraph AND (PosInCurrentParagraph=L(CurrentParagraph)+1 OR CursorCol=84) THEN CursorCol=0:direction=2
+2240 IF direction=1 AND CurrentParagraph=LastParagraph AND CursorCol=84 THEN CursorCol=0:direction=2
+2250 IF direction=1 AND CursorCol < 84 AND PosInCurrentParagraph <> L(CurrentParagraph)+1 THEN CursorCol=CursorCol+1
+2258 ; Move the cursor to the left, or to the end of the
+2259 ; previous row if the current column is 0.
+2260 IF direction=3 AND NOT (CurrentParagraph=1 AND CursorRow=R(CurrentParagraph)) AND CursorCol=0 THEN CursorCol=84:direction=0
+2270 IF direction=3 THEN IF CursorCol > 0 THEN CursorCol=CursorCol-1
+2275 ; Move the cursor down and scroll the text if needed.
+2276 ; But first check that we don't move down past the last row.
+2277 ; An exception is when the last row is completely filled.
+2278 ; In that case the cursor must be allowed to move down
+2279 ; one row to column 0.
+2280 IF direction=2 AND CurrentParagraph >= LastParagraph AND CursorRow >= R(LastParagraph)+N(LastParagraph)-1 AND (CursorCol > 0 OR L(CurrentParagraph)=1 OR PosInCurrentParagraph <> L(CurrentParagraph)) THEN PROC DisplayCursor(): ENDPROC
+2290 IF direction=2 THEN CursorRow=CursorRow+1: IF CursorRow > 20 THEN CursorRow=20: PROC Scroll(1)
+2300 ; Move the cursor up, and scroll the text if needed.
+2310 IF direction=0 THEN CursorRow=CursorRow-1: IF CursorRow < 1 THEN CursorRow=1: PROC Scroll(0)
+2320 ; Calculate where in the text the cursor is placed. Also,
+2330 ; adjust the cursor position if it is placed at a point
+2340 ; where there is no text (by moving it to the left until
+2350 ; the last character on the row is found).
+2400 PROC CalculateCursorPositionInText()
+2405 ; Display the cursor at its new position.
+2410 PROC DisplayCursor()
+2440 ENDPROC
+2450 ; ---------------------------------------------------------
+2451 ; -                   Display cursor                      -
+2452 ; ---------------------------------------------------------
+2460 DEFPROC DisplayCursor()
+2475 PRINT AT CursorRow,CursorCol; OVER 1; CHR$ 143
+2480 ENDPROC
+2600 ; ---------------------------------------------------------
+2601 ; -          Calculate cursor position in text            -
+2602 ; ---------------------------------------------------------
+2610 DEFPROC CalculateCursorPositionInText()
+2620 LOCAL paragraphCounter
+2630 ; Calcluate in which paragraph the cursor is positioned.
+2640 ; by looping through the visible paragraphs and match
+2650 ; the cursor row and column with the paragraph meta data.
+2660 paragraphCounter=FirstVisibleParagraph-1
+2670 REPEAT
+2680 paragraphCounter=paragraphCounter+1
+2690 REPEAT UNTIL CursorRow >= R(paragraphCounter) AND CursorRow <= R(paragraphCounter)+N(paragraphCounter)-1
+2700 CurrentParagraph=paragraphCounter
+2705 IF CurrentParagraph >= LastParagraph THEN CurrentParagraph=LastParagraph
+2710 ; Calculate where in the paragraph the cursor is positioned.
+2720 PosInCurrentParagraph=(CursorRow-R(CurrentParagraph))*85+CursorCol+1
+2730 ; If the cursor is placed beyond the end of a paragraph,
+2735 ; move it back.
+2740 IF PosInCurrentParagraph > L(CurrentParagraph)+1 THEN PosInCurrentParagraph=L(CurrentParagraph)+1:CursorCol=L(CurrentParagraph)-85* INT (L(CurrentParagraph)/85)
+2760 ENDPROC
+2800 ; ---------------------------------------------------------
+2801 ; -                   Insert character                    -
+2802 ; ---------------------------------------------------------
+2810 DEFPROC InsertChar()
+2820 ; A paragraph can't be more than 256 characters.
+2830 IF L(CurrentParagraph) >= 256 THEN PROC Message("Paragraph full",0): ENDPROC
+2840 ; Insert the character.
+2850 P$(CurrentParagraph)=P$(CurrentParagraph,1 TO PosInCurrentParagraph-1)+ CHR$ (LastKeyPressed)+P$(CurrentParagraph,PosInCurrentParagraph TO L(CurrentParagraph))
+2860 L(CurrentParagraph)=L(CurrentParagraph)+1
+2870 ; Check if the paragraph expands to a new line. If so, refresh the display.
+2880 IF L(CurrentParagraph)=86 OR L(CurrentParagraph)=171 THEN PROC RefreshDisplay(): ELSE PRINT AT R(CurrentParagraph),0;P$(CurrentParagraph, TO L(CurrentParagraph))
+2890 PROC DisplayCursor()
+2900 ; Move the cursor to the right.
+2910 PROC MoveCursor(1)
+2920 ; Make a note that the file has unsaved changes.
+2930 DirtyFlag=1
+2950 CharacterCount=CharacterCount+1
+2960 PROC DisplayCharacterCount()
+2970 ENDPROC
+3000 ; ---------------------------------------------------------
+3001 ; -                   Handle Delete key                   -
+3002 ; ---------------------------------------------------------
+3010 DEFPROC HandleDeleteKey()
+3020 IF CursorCol=0 AND CurrentParagraph > 1 AND PosInCurrentParagraph=1 THEN PROC MergeParagraphs(): ELSE IF PosInCurrentParagraph > 1 THEN PROC DeleteChar()
+3030 ENDPROC
+3050 ; ---------------------------------------------------------
+3051 ; -                    Delete character                   -
+3052 ; ---------------------------------------------------------
+3060 DEFPROC DeleteChar()
+3070 ; Erase the cursor.
+3080 PROC DisplayCursor()
+3090 ; Delete the character to the left of the cursor.
+3100 P$(CurrentParagraph)=P$(CurrentParagraph,1 TO PosInCurrentParagraph-2)+P$(CurrentParagraph,PosInCurrentParagraph TO L(CurrentParagraph)):L(CurrentParagraph)=L(CurrentParagraph)-1:
+3110 ; If the paragraph now is a row shorter, refresh the display, otherwise just print the new paragraph content.
+3120 IF L(CurrentParagraph)=84 OR L(CurrentParagraph)=169 THEN PROC RefreshDisplay(): ELSE PRINT AT R(CurrentParagraph),0;P$(CurrentParagraph, TO L(CurrentParagraph));" "
+3130 ; Display the cursor again, and then move it to the left.
+3140 PROC DisplayCursor()
+3150 PROC MoveCursor(3)
+3160 ; Make a note that the file has unsaved changes.
+3170 DirtyFlag=1
+3180 CharacterCount=CharacterCount-1
+3190 PROC DisplayCharacterCount()
+3195 ENDPROC
+3200 ; ---------------------------------------------------------
+3201 ; -                    Merge paragraphs                   -
+3202 ; ---------------------------------------------------------
+3203 ; This procedure is called when <DELETE> is pressed at
+3204 ; column 0, and merges two paragraphs.
+3210 DEFPROC MergeParagraphs()
+3215 ; Check that the maximum paragraph length is not exceeded.
+3220 IF L(CurrentParagraph)+L(CurrentParagraph-1) > 256 THEN PROC MESSAGE("Maximum paragraph length will be exceeded",0): ENDPROC
+3225 ; Move the cursor to the end of the row above the cursor.
+3230 CursorCol=L(CurrentParagraph-1)-85* INT ABS (((L(CurrentParagraph-1)-1)/85)): IF CursorCol=85 THEN CursorCol=84
+3240 CursorRow=CursorRow-1: IF CursorRow < 1 THEN CursorRow=1: PROC Scroll(0)
+3245 ; Merge the paragraphs.
+3250 P$(CurrentParagraph-1)=P$(CurrentParagraph-1,1 TO L(CurrentParagraph-1))+P$(CurrentParagraph)
+3260 L(CurrentParagraph-1)=L(CurrentParagraph-1)+L(CurrentParagraph)
+3265 ; Move up all the paragraphs below the merged paragraphs.
+3270 FOR i=CurrentParagraph TO LastParagraph-1
+3280 L(i)=L(i+1)
+3290 P$(i)=P$(i+1)
+3300 L(i+1)=0
+3310 P$(i+1)=""
+3320 NEXT i
+3330 L(LastParagraph)=0
+3340 P$(LastParagraph)=""
+3350 LastParagraph=LastParagraph-1
+3360 PROC RefreshDisplay()
+3370 PROC DisplayCursor()
+3380 PROC CalculateCursorPositionInText()
+3385 ; Make a note that the file has unsaved changes.
+3390 DirtyFlag=1
+3395 ENDPROC
+3400 ; ---------------------------------------------------------
+3401 ; -                    Insert paragraph                   -
+3402 ; ---------------------------------------------------------
+3410 ; This procedure is called when the user hits <ENTER>, and
+3420 ; splits the paragraph at the cursor into two paragraphs.
+3430 DEFPROC InsertParagraph()
+3440 ; Check that the maximum number of parapgraphs is not
+3450 ; exceeded.
+3460 IF LastParagraph=MaxNumberOfParagraphs THEN PROC MESSAGE("Too many paragraphs",0): ENDPROC
+3470 ; Move the cursor to the first column and down one row.
+3490 IF NOT (CursorCol=0 AND PosInCurrentParagraph <> 1) THEN CursorRow=CursorRow+1: IF CursorRow > 20 THEN CursorRow=20: PROC Scroll(1)
+3495 CursorCol=0
+3500 ; Move all paragraphs below the cursor down.
+3510 LastParagraph=LastParagraph+1
+3520 FOR i=LastParagraph TO CurrentParagraph+1 STEP -1
+3530 P$(i)=P$(i-1)
+3540 L(i)=L(i-1)
+3550 NEXT i
+3560 ; Prepare the new paragraph.
+3570 P$(CurrentParagraph+1)=P$(CurrentParagraph)(PosInCurrentParagraph TO L(CurrentParagraph))
+3580 L(CurrentParagraph+1)=L(CurrentParagraph)-PosInCurrentParagraph+1
+3590 P$(CurrentParagraph)=P$(CurrentParagraph)( TO PosInCurrentParagraph-1)
+3600 L(CurrentParagraph)=L(CurrentParagraph)-L(CurrentParagraph+1)
+3610 PROC RefreshDisplay()
+3620 PROC DisplayCursor()
+3630 PROC CalculateCursorPositionInText()
+3640 ; Make a note that the file has unsaved changes.
+3650 DirtyFlag=1
+3660 ENDPROC
+4000 ; ---------------------------------------------------------
+4001 ; -                         Scroll                        -
+4002 ; ---------------------------------------------------------
+4010 DEFPROC Scroll(scrollDirection): ; 0=up, 1=down
+4025 IF scrollDirection=0 AND FirstVisibleParagraph > 1 THEN FirstVisibleParagraph=FirstVisibleParagraph-1: PROC RefreshDisplay()
+4030 IF scrollDirection=1 AND FirstVisibleParagraph < LastParagraph THEN FirstVisibleParagraph=FirstVisibleParagraph+1: PROC RefreshDisplay()
+4040 ENDPROC
+5700 ; ---------------------------------------------------------
+5701 ; -                     Display menu                      -
+5702 ; ---------------------------------------------------------
+5710 DEFPROC DisplayMenu()
+5720 PRINT AT 23,0;"Commands in extended mode: "; INVERSE 1;"n"; INVERSE 0;"ew | "; INVERSE 1;"o"; INVERSE 0;"pen | "; INVERSE 1;"s"; INVERSE 0;"ave | "; INVERSE 0;"save "; INVERSE 1;"a"; INVERSE 0;"s | "; INVERSE 1;"q"; INVERSE 0;"uit"
+5730 ENDPROC
+5800 ; ---------------------------------------------------------
+5801 ; -                     Progress bar                      -
+5802 ; ---------------------------------------------------------
+5810 DEFPROC Progress(p)
+5820 PRINT AT 23,73;"|||||||||||"( TO p)
+5830 BEEP 0.01,3
+5860 ENDPROC
+5900 ; ---------------------------------------------------------
+5901 ; -               Display character count                 -
+5902 ; ---------------------------------------------------------
+5910 DEFPROC DisplayCharacterCount()
+5920 PRINT AT 0,80- LEN STR$ CharacterCount;CharacterCount;" chrs"
+5930 ENDPROC
+6000 ; ---------------------------------------------------------
+6001 ; -                   Display message                     -
+6002 ; ---------------------------------------------------------
+6010 DEFPROC Message(m$,persistant)
+6023 PRINT AT 22,0; INVERSE 1;m$
+6026 BEEP 0.1,3
+6032 PAUSE 60
+6042 IF NOT persistant=1 THEN PROC ClearMessage()
+6060 ENDPROC
+6100 ; ---------------------------------------------------------
+6101 ; -                    Clear message                      -
+6102 ; ---------------------------------------------------------
+6110 DEFPROC ClearMessage()
+6120 PRINT AT 22,0;"                                           "
+6130 ENDPROC
+8000 ; ---------------------------------------------------------
+8001 ; -                 Handle mouse click                    -
+8002 ; ---------------------------------------------------------
+8010 DEFPROC HandleMouseClick(x,y)
+8020 ; Translate x and y coordinates to row and column.
+8030 mCurRow= INT (y/8)-4
+8040 mCurCol= INT (x/6)-11
+8050 ; If the mouse pointer is located in the text area, move
+8060 ; the cursor to the pointer location.
+8070 IF mCurRow > 0 AND mCurRow <= R(LastVisibleParagraph)+N(LastVisibleParagraph)-1 AND mCurCol >= 0 AND mCurCol <= 85 THEN PROC DisplayCursor():CursorCol=mCurCol:CursorRow=mCurRow: PROC CalculateCursorPositionInText(): PROC DisplayCursor()
+8079 ; Handle clicks in the command area.
+8080 IF mCurRow=23 AND mCurCol >= 26 AND  mCurCol <= 30 THEN POKE LASTK,166: ; New
+8090 IF mCurRow=23 AND mCurCol >= 32 AND  mCurCol <= 37 THEN POKE LASTK,190: ; Open
+8100 IF mCurRow=23 AND mCurCol >= 39 AND  mCurCol <= 44 THEN POKE LASTK,229: ; Save
+8110 IF mCurRow=23 AND mCurCol >= 46 AND  mCurCol <= 54 THEN POKE LASTK,227: ; Save as
+8120 IF mCurRow=23 AND mCurCol >= 56 AND  mCurCol <= 61 THEN POKE LASTK,178: ; Quit
+8130 ENDPROC
