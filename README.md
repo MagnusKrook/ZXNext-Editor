@@ -12,11 +12,11 @@ The editor has the following limitations on the size of the files it can open an
 * Max number of paragraphs: 100.
 
 ## Running the program
-The program consists of two parts: The main program **Editor.bas** together with **EditorProc.bas** which is stored in a separate memory bank. Copy both these files to the SD card and type **LOAD "Editor.bas"** to start the editor.
+The program consists of two parts: The main program **Editor.bas** together with **EditorProc.bas** which is stored in a separate memory bank. It also needs the file **Pointer.spr**. Copy all files to the SD card and type **LOAD "Editor.bas"**. Note that if you have loaded the program and then start it from a different folder than where it was installed, it won't find the EditorProc.bas and Pointer.spr files. To remedy this, edit the **F$** variable on line 110 to your installation path (for example F$="/tools/editor/").
 
 The editor commands are accessed by entering extended mode and pressing the relevant key as presented in command menu at the bottom of the screen.
 
-If a mouse is connected, it can be used to move the cursor and to trigger commands.
+If a mouse is connected, it can be used to position the cursor and to trigger commands.
 
 ## Source code
 The source code (**Editor.bas.txt** and **EditorProc.bas.text**) has been authored in Visual Studio Code with Remy Sharp's [NextBASIC plugin](https://marketplace.visualstudio.com/items?itemName=remysharp.nextbasic) and the ZX Spectrum Next emulator [CSpect](http://www.cspect.org/) by Mike Dailly.
