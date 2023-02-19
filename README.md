@@ -3,7 +3,7 @@ A text editor for the [ZX Spectrum Next](https:specnext.com), built in NextBASIC
 
 ## Description
 This is a simple text editor for editing configuration files and other short text files.
-Despite being built in BASIC it is quite fast, thanks to the Next 28 kHz mode and some of the unique commands and functions available in NextBASIC.
+Despite being built in BASIC it is quite fast, thanks to the Next 28 MHz mode and some of the unique commands and functions available in NextBASIC.
 
 ## Limitations
 The editor has the following limitations on the size of the files it can open and save:
