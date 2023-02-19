@@ -12,7 +12,7 @@
 120 RemoveHeader=1: 
 140 ; Save the current CPU Speed.
 150 OUT 9275,7:%C=% IN 9531&@11:
-160 ; Set CPU Speed to 28 KHz.
+160 ; Set CPU Speed to 28 MHz.
 170 RUN AT 3:
 180 ; Select Timex HiRes mode and 85 columns.
 190 LAYER 1,2: PRINT CHR$ 30; CHR$ 6: BORDER 7: INK 0: CLS
